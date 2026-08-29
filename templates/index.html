@@ -1,0 +1,521 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Aura</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="preconnect" href="https://cdnjs.cloudflare.com" crossorigin>
+  <link rel="preconnect" href="https://i.ytimg.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@360;500;650;760&family=Sora:wght@500;700;800&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" media="print" onload="this.media='all'">
+  <noscript>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Outfit:wght@360;500;650;760&family=Sora:wght@500;700;800&display=swap">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+  </noscript>
+  <link rel="stylesheet" href="/static/css/style.css?v=10">
+</head>
+<body>
+  <!-- NeonWave-style aurora field -->
+  <div class="bg-field" aria-hidden="true">
+    <div class="bg-orb orb-a" id="orbA"></div>
+    <div class="bg-orb orb-b" id="orbB"></div>
+    <div class="bg-orb orb-c" id="orbC"></div>
+    <div class="bg-mesh"></div>
+    <div class="bg-noise"></div>
+    <div class="bg-vignette"></div>
+  </div>
+
+  <div id="app">
+    <!-- Sidebar -->
+    <aside class="sidebar glass-panel" id="sidebar">
+      <div class="brand">
+        <div class="brand-mark">
+          <i class="fa-solid fa-bolt"></i>
+          <span class="brand-ring"></span>
+        </div>
+        <div class="brand-text">
+          <span class="brand-name">Aura</span>
+          <span class="brand-tag">spectral stream</span>
+        </div>
+      </div>
+
+      <nav class="nav-main">
+        <a href="#" class="nav-item active" data-view="home"><i class="fa-solid fa-house"></i><span>Home</span></a>
+        <a href="#" class="nav-item" data-view="explore"><i class="fa-solid fa-compass"></i><span>Explore</span></a>
+        <a href="#" class="nav-item" data-view="radio"><i class="fa-solid fa-tower-broadcast"></i><span>Radio</span></a>
+        <a href="#" class="nav-item" data-view="search"><i class="fa-solid fa-magnifying-glass"></i><span>Search</span></a>
+        <a href="#" class="nav-item" data-view="library"><i class="fa-solid fa-record-vinyl"></i><span>Library</span></a>
+      </nav>
+
+      <div class="sidebar-divider"><span>Collections</span></div>
+
+      <nav class="nav-secondary">
+        <a href="#" class="nav-item" data-view="history"><i class="fa-solid fa-clock-rotate-left"></i><span>History</span></a>
+        <a href="#" class="nav-item" data-view="liked"><i class="fa-solid fa-heart"></i><span>Liked Songs</span></a>
+        <a href="#" class="nav-item" data-view="playlists"><i class="fa-solid fa-list"></i><span>Playlists</span></a>
+      </nav>
+
+      <div class="mood-rail" id="moodRail" aria-label="Moods">
+        <button type="button" class="mood-chip active" data-mood="all">All</button>
+        <button type="button" class="mood-chip" data-mood="focus">Focus</button>
+        <button type="button" class="mood-chip" data-mood="drive">Drive</button>
+        <button type="button" class="mood-chip" data-mood="chill">Chill</button>
+        <button type="button" class="mood-chip" data-mood="night">Night</button>
+      </div>
+
+      <div class="sidebar-footer">
+        <div class="now-mini glass-inset" id="nowMini" title="Click for full player">
+          <div class="now-mini-art">
+            <img id="miniThumb" src="" alt="">
+            <div class="mini-eq" id="miniEq">
+              <span></span><span></span><span></span><span></span>
+            </div>
+          </div>
+          <div class="mini-info">
+            <span id="miniTitle">Nothing playing</span>
+            <span id="miniArtist">—</span>
+          </div>
+        </div>
+
+        <div class="quick-actions">
+          <button class="action-btn" id="sleepTimerBtn" title="Sleep Timer" type="button">
+            <i class="fa-solid fa-moon"></i>
+          </button>
+          <button class="action-btn" id="shareBtn" title="Share" type="button">
+            <i class="fa-solid fa-share-nodes"></i>
+          </button>
+          <button class="action-btn" id="settingsBtn" title="Settings" type="button">
+            <i class="fa-solid fa-gear"></i>
+          </button>
+        </div>
+        <p class="made-by" id="madeBy">Made with 💖 by Akshat Arora</p>
+      </div>
+    </aside>
+
+    <!-- Main Content -->
+    <main class="main" id="mainContent">
+      <header class="topbar glass-bar">
+        <div class="nav-arrows">
+          <button class="nav-arrow" id="btnBack" title="Back" type="button"><i class="fa-solid fa-chevron-left"></i></button>
+          <button class="nav-arrow" id="btnForward" title="Forward" type="button"><i class="fa-solid fa-chevron-right"></i></button>
+        </div>
+        <div class="search-box" id="searchBox">
+          <i class="fa-solid fa-magnifying-glass"></i>
+          <input type="text" id="searchInput" placeholder="Search songs, artists, vibes…" autocomplete="off">
+          <kbd class="search-kbd">↵</kbd>
+          <div class="search-suggestions" id="searchSuggestions"></div>
+        </div>
+        <div class="topbar-pills">
+          <span class="live-pill"><span class="live-dot"></span> Live catalog</span>
+          <button type="button" class="ghost-pill" id="btnListenTogetherTop" title="Listen Together"><i class="fa-solid fa-people-group"></i></button>
+          <button type="button" class="ghost-pill" id="btnShortcuts" title="Keyboard shortcuts"><i class="fa-solid fa-keyboard"></i></button>
+        </div>
+      </header>
+
+      <!-- Home -->
+      <div id="view-home" class="view active">
+          <section class="hero-banner glass-panel">
+          <div class="streak-badge" id="streakBadge"><i class="fa-solid fa-fire"></i><span>0 day streak</span></div>
+          <div class="hero-copy">
+            <p class="hero-kicker">AURA · BY AKSHAT ARORA</p>
+            <h1 id="greetingText">Good evening</h1>
+            <div class="hero-actions">
+              <button type="button" class="btn-primary" id="heroPlayTrending"><i class="fa-solid fa-play"></i> Play trending</button>
+              <button type="button" class="btn-ghost" data-view="explore"><i class="fa-solid fa-compass"></i> Explore</button>
+              <button type="button" class="btn-ghost" id="heroStartRadio"><i class="fa-solid fa-tower-broadcast"></i> Start radio</button>
+            </div>
+          </div>
+          </section>
+          <div class="mobile-mood-strip" aria-label="Mood mixes">
+            <span class="mood-strip-label">Your mood</span>
+            <button type="button" class="mood-chip" data-mood="focus"><i class="fa-solid fa-bullseye"></i> Focus</button>
+            <button type="button" class="mood-chip" data-mood="drive"><i class="fa-solid fa-bolt"></i> Drive</button>
+            <button type="button" class="mood-chip" data-mood="chill"><i class="fa-solid fa-cloud"></i> Chill</button>
+            <button type="button" class="mood-chip" data-mood="night"><i class="fa-solid fa-moon"></i> Night</button>
+          </div>
+          <div class="quick-picks" id="quickPicks"></div>
+
+        <section class="section">
+          <div class="section-header">
+            <div>
+              <p class="section-kicker">Right now</p>
+              <h2>Trending</h2>
+            </div>
+            <a href="#" class="see-all" data-view="trending">See all <i class="fa-solid fa-arrow-right"></i></a>
+          </div>
+          <div id="trendingGrid" class="song-grid"></div>
+        </section>
+      </div>
+
+      <!-- Explore -->
+      <div id="view-explore" class="view">
+        <div class="section-header tight">
+          <div>
+            <p class="section-kicker">Discover</p>
+            <h2>Explore</h2>
+          </div>
+        </div>
+        <div id="exploreContent" class="explore-grid"></div>
+      </div>
+
+      <!-- Radio -->
+      <div id="view-radio" class="view">
+        <div class="section-header tight">
+          <div>
+            <p class="section-kicker">Infinite mix</p>
+            <h2><i class="fa-solid fa-tower-broadcast accent-icon"></i> Radio</h2>
+          </div>
+          <button type="button" class="btn-primary sm" id="radioRefresh"><i class="fa-solid fa-rotate"></i> Refresh</button>
+        </div>
+        <p class="view-lead" id="radioLead">Pick a seed track or start radio from anything playing.</p>
+        <div class="radio-seeds" id="radioSeeds"></div>
+        <div id="radioGrid" class="song-grid"></div>
+        <div id="radioEmpty" class="empty-state" style="display:none">
+          <div class="empty-orb"><i class="fa-solid fa-tower-broadcast"></i></div>
+          <p>Play a song, then open Radio for a personal station</p>
+        </div>
+      </div>
+
+      <!-- Search -->
+      <div id="view-search" class="view">
+        <div class="section-header tight">
+          <div>
+            <p class="section-kicker">Find anything</p>
+            <h2>Search</h2>
+          </div>
+        </div>
+        <div class="search-filters" id="searchFilters" style="display:none">
+          <button class="filter-chip active" data-filter="all" type="button">All</button>
+          <button class="filter-chip" data-filter="songs" type="button">Songs</button>
+          <button class="filter-chip" data-filter="videos" type="button">Videos</button>
+          <button class="filter-chip" data-filter="albums" type="button">Albums</button>
+          <button class="filter-chip" data-filter="artists" type="button">Artists</button>
+        </div>
+        <div id="recentSearches" class="recent-searches" style="display:none"></div>
+        <div id="searchResults" class="search-results"></div>
+        <div id="searchEmpty" class="empty-state">
+          <div class="empty-orb"><i class="fa-solid fa-music"></i></div>
+          <p>Search for your favorite songs</p>
+        </div>
+      </div>
+
+      <!-- Trending (full) -->
+      <div id="view-trending" class="view">
+        <div class="section-header tight">
+          <div>
+            <p class="section-kicker">Charts</p>
+            <h2><i class="fa-solid fa-fire accent-icon"></i> Trending</h2>
+          </div>
+        </div>
+        <div id="trendingFull" class="song-grid"></div>
+      </div>
+
+      <!-- Library -->
+      <div id="view-library" class="view">
+        <div class="section-header tight">
+          <div>
+            <p class="section-kicker">Yours</p>
+            <h2>Your Library</h2>
+          </div>
+        </div>
+        <div class="library-sections">
+          <div class="lib-card glass-panel" data-view="liked">
+            <div class="lib-card-icon"><i class="fa-solid fa-heart"></i></div>
+            <span>Liked Songs</span>
+            <span class="lib-count" id="likedCount">0</span>
+          </div>
+          <div class="lib-card glass-panel" data-view="history">
+            <div class="lib-card-icon alt"><i class="fa-solid fa-clock-rotate-left"></i></div>
+            <span>Recently Played</span>
+            <span class="lib-count" id="historyCount">0</span>
+          </div>
+          <div class="lib-card glass-panel" data-view="playlists">
+            <div class="lib-card-icon" style="background:linear-gradient(135deg,#22d3ee,#a855f7)"><i class="fa-solid fa-list"></i></div>
+            <span>Playlists</span>
+            <span class="lib-count" id="playlistCount">0</span>
+          </div>
+        </div>
+        <div class="library-tools">
+          <button type="button" class="btn-ghost" id="exportLiked"><i class="fa-solid fa-file-export"></i> Export liked</button>
+          <button type="button" class="btn-primary sm" id="createPlaylistBtn"><i class="fa-solid fa-plus"></i> New playlist</button>
+        </div>
+      </div>
+
+      <!-- Playlists -->
+      <div id="view-playlists" class="view">
+        <div class="view-header">
+          <div>
+            <p class="section-kicker">Yours</p>
+            <h2><i class="fa-solid fa-list accent-icon"></i> Playlists</h2>
+          </div>
+          <button type="button" class="btn-primary sm" id="createPlaylistBtn2"><i class="fa-solid fa-plus"></i> New</button>
+        </div>
+        <div id="playlistsGrid" class="playlist-grid"></div>
+        <div id="playlistsEmpty" class="empty-state" style="display:none">
+          <div class="empty-orb"><i class="fa-solid fa-list"></i></div>
+          <p>Create a playlist to save your mixes</p>
+        </div>
+      </div>
+
+      <!-- Single playlist -->
+      <div id="view-playlist" class="view">
+        <div class="album-hero glass-panel" id="playlistHero"></div>
+        <div class="artist-actions" id="playlistActions"></div>
+        <div id="playlistSongs" class="song-grid"></div>
+        <div id="playlistEmpty" class="empty-state" style="display:none">
+          <div class="empty-orb"><i class="fa-solid fa-music"></i></div>
+          <p>This playlist is empty — add songs from the ··· menu</p>
+        </div>
+      </div>
+
+      <!-- History -->
+      <div id="view-history" class="view">
+        <div class="view-header">
+          <div>
+            <p class="section-kicker">Timeline</p>
+            <h2><i class="fa-solid fa-clock-rotate-left accent-icon"></i> Recently Played</h2>
+          </div>
+          <button class="text-btn" id="clearHistory" type="button">Clear</button>
+        </div>
+        <div id="historyGrid" class="song-grid"></div>
+        <div id="historyEmpty" class="empty-state" style="display:none">
+          <div class="empty-orb"><i class="fa-solid fa-clock"></i></div>
+          <p>Nothing here yet</p>
+        </div>
+      </div>
+
+      <!-- Liked -->
+      <div id="view-liked" class="view">
+        <div class="view-header">
+          <div>
+            <p class="section-kicker">Favorites</p>
+            <h2><i class="fa-solid fa-heart accent-icon"></i> Liked Songs</h2>
+          </div>
+          <button type="button" class="text-btn" id="playLikedAll"><i class="fa-solid fa-play"></i> Play all</button>
+        </div>
+        <div id="likedGrid" class="song-grid"></div>
+        <div id="likedEmpty" class="empty-state" style="display:none">
+          <div class="empty-orb"><i class="fa-solid fa-heart"></i></div>
+          <p>No liked songs yet</p>
+        </div>
+      </div>
+
+      <!-- Artist -->
+      <div id="view-artist" class="view">
+        <div class="artist-hero glass-panel" id="artistHero"></div>
+        <div class="artist-actions" id="artistActions"></div>
+        <h3 class="inline-heading">Top Songs</h3>
+        <div id="artistSongs" class="song-grid"></div>
+        <h3 id="artistAlbumsTitle" class="inline-heading" style="display:none">Albums</h3>
+        <div id="artistAlbums" class="album-grid"></div>
+        <h3 id="artistRelatedTitle" class="inline-heading" style="display:none">Fans also like</h3>
+        <div id="artistRelated" class="artist-grid"></div>
+      </div>
+
+      <!-- Album -->
+      <div id="view-album" class="view">
+        <div class="album-hero glass-panel" id="albumHero"></div>
+        <div id="albumSongs" class="song-grid"></div>
+      </div>
+    </main>
+
+    <!-- Queue Panel -->
+    <aside class="queue-panel glass-panel" id="queuePanel">
+      <div class="queue-header">
+        <div>
+          <p class="section-kicker">Up next</p>
+          <h3>Queue</h3>
+        </div>
+        <div class="queue-tools">
+          <button class="icon-btn" id="clearQueue" type="button" title="Clear queue"><i class="fa-solid fa-trash"></i></button>
+          <button class="icon-btn" id="closeQueue" type="button"><i class="fa-solid fa-xmark"></i></button>
+        </div>
+      </div>
+      <div class="queue-list" id="queueList"></div>
+    </aside>
+
+    <!-- Lyrics drawer -->
+    <aside class="lyrics-panel glass-panel" id="lyricsPanel">
+      <div class="queue-header">
+        <div>
+          <p class="section-kicker">Words</p>
+          <h3>Lyrics</h3>
+        </div>
+        <button class="icon-btn" id="closeLyrics" type="button"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+      <div class="lyrics-now glass-inset" id="lyricsNow">
+        <img id="lyricsThumb" src="" alt="">
+        <div class="ln-meta">
+          <span class="ln-title" id="lyricsTrackTitle">—</span>
+          <span class="ln-artist" id="lyricsTrackArtist">—</span>
+        </div>
+      </div>
+      <div class="lyrics-body" id="lyricsBody">
+        <p class="lyrics-placeholder">Play a track to load lyrics</p>
+      </div>
+    </aside>
+  </div>
+
+  <!-- Mobile bottom nav -->
+  <nav class="mobile-nav" id="mobileNav" aria-label="Mobile navigation">
+    <a href="#" class="mnav-item active" data-view="home"><i class="fa-solid fa-house"></i><span>Home</span></a>
+    <a href="#" class="mnav-item" data-view="explore"><i class="fa-solid fa-compass"></i><span>Explore</span></a>
+    <a href="#" class="mnav-item" data-view="search"><i class="fa-solid fa-magnifying-glass"></i><span>Search</span></a>
+    <a href="#" class="mnav-item" data-view="library"><i class="fa-solid fa-record-vinyl"></i><span>Library</span></a>
+    <a href="#" class="mnav-item" data-view="radio"><i class="fa-solid fa-tower-broadcast"></i><span>Radio</span></a>
+  </nav>
+
+  <!-- Now Playing Full Screen -->
+  <div class="now-playing-full" id="nowPlayingFull">
+    <div class="npf-bg" id="npfBg"></div>
+    <div class="npf-glow"></div>
+    <button class="npf-close" id="npfClose" type="button"><i class="fa-solid fa-chevron-down"></i></button>
+    <div class="npf-content">
+      <div class="npf-art" id="npfArt">
+        <img id="npfThumb" src="" alt="">
+        <video id="npfVideo" class="npf-video" muted playsinline></video>
+        <div id="npfEmbed" class="npf-embed"></div>
+        <div class="npf-lyrics" id="npfLyrics"></div>
+        <div class="npf-vinyl"></div>
+        <div class="npf-ring"></div>
+      </div>
+      <div class="npf-info">
+        <span class="npf-title" id="npfTitle">—</span>
+        <span class="npf-artist" id="npfArtist">—</span>
+      </div>
+      <div class="npf-progress">
+        <div class="progress-bar-wrap">
+          <input type="range" id="npfProgress" min="0" max="1000" value="0">
+          <div class="progress-fill" id="npfProgressFill"></div>
+        </div>
+        <div class="npf-times">
+          <span id="npfTimeCurrent">0:00</span>
+          <span id="npfTimeDuration">0:00</span>
+        </div>
+      </div>
+      <div class="npf-controls">
+        <button class="ctrl-btn" id="npfShuffle" type="button"><i class="fa-solid fa-shuffle"></i></button>
+        <button class="ctrl-btn" id="npfPrev" type="button"><i class="fa-solid fa-backward-step"></i></button>
+        <button class="ctrl-btn npf-play" id="npfPlay" type="button"><i class="fa-solid fa-play"></i></button>
+        <button class="ctrl-btn" id="npfNext" type="button"><i class="fa-solid fa-forward-step"></i></button>
+        <button class="ctrl-btn" id="npfRepeat" type="button"><i class="fa-solid fa-repeat"></i></button>
+      </div>
+      <div class="npf-extras">
+        <button class="icon-btn" id="npfLike" type="button" title="Like"><i class="fa-regular fa-heart"></i></button>
+        <button class="icon-btn" id="npfEq" type="button" title="Equalizer"><i class="fa-solid fa-sliders"></i></button>
+        <button class="icon-btn" id="npfLyricsBtn" type="button" title="Lyrics"><i class="fa-solid fa-align-left"></i></button>
+        <button class="icon-btn" id="npfRadio" type="button" title="Start radio"><i class="fa-solid fa-tower-broadcast"></i></button>
+        <button class="icon-btn" id="npfQueue" type="button" title="Queue"><i class="fa-solid fa-list-ol"></i></button>
+      </div>
+      <p class="made-by npf-credit">Made with 💖 by Akshat Arora</p>
+    </div>
+  </div>
+
+  <!-- Equalizer panel -->
+  <aside class="eq-panel glass-panel" id="eqPanel" hidden>
+    <div class="queue-header">
+      <div>
+        <p class="section-kicker">Sound design</p>
+        <h3>Equalizer</h3>
+      </div>
+      <button class="icon-btn" id="closeEq" type="button"><i class="fa-solid fa-xmark"></i></button>
+    </div>
+    <p class="eq-lead">Presets apply to extracted audio playback (HTML stream). 8D pans in stereo.</p>
+    <div class="eq-presets" id="eqPresets"></div>
+    <div class="eq-viz" id="eqViz" aria-hidden="true">
+      <span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span>
+    </div>
+    <div class="eq-meta" id="eqMeta">Preset: Flat</div>
+  </aside>
+
+  <!-- YouTube Player (hidden, for fallback) -->
+  <div style="position:absolute;top:-9999px;left:-9999px;width:1px;height:1px;">
+    <div id="ytPlayer"></div>
+  </div>
+
+  <audio id="audioPlayer" preload="auto" crossorigin="anonymous" playsinline></audio>
+  <!-- Extracted video fallback: audio is routed through Web Audio EQ; the full-player video remains a muted visual layer. -->
+  <video id="mediaVideo" preload="none" crossorigin="anonymous" playsinline aria-hidden="true" style="position:fixed;width:1px;height:1px;opacity:0;pointer-events:none;left:-10px;top:-10px;"></video>
+
+  <!-- Player Bar -->
+  <footer class="player-bar glass-bar" id="playerBar">
+    <div class="player-spectrum" id="playerSpectrum" aria-hidden="true"></div>
+    <div class="player-left" id="playerLeft">
+      <div class="player-thumb-wrap">
+        <img id="playerThumb" src="" alt="" class="player-thumb">
+      </div>
+      <div class="player-meta">
+        <span id="playerTitle" class="player-title">—</span>
+        <span id="playerArtist" class="player-artist">—</span>
+      </div>
+      <button class="icon-btn like-btn" id="btnLike" type="button" title="Like"><i class="fa-regular fa-heart"></i></button>
+    </div>
+    <div class="player-center">
+      <div class="player-controls">
+        <button class="ctrl-btn" id="btnShuffle" title="Shuffle" type="button"><i class="fa-solid fa-shuffle"></i></button>
+        <button class="ctrl-btn" id="btnPrev" type="button"><i class="fa-solid fa-backward-step"></i></button>
+        <button class="ctrl-btn play-btn" id="btnPlay" type="button"><i class="fa-solid fa-play"></i></button>
+        <button class="ctrl-btn" id="btnNext" type="button"><i class="fa-solid fa-forward-step"></i></button>
+        <button class="ctrl-btn" id="btnRepeat" title="Repeat" type="button"><i class="fa-solid fa-repeat"></i></button>
+      </div>
+      <div class="progress-row">
+        <span id="timeCurrent">0:00</span>
+        <div class="progress-bar-wrap">
+          <input type="range" id="progressBar" min="0" max="1000" value="0">
+          <div class="progress-fill" id="progressFill"></div>
+        </div>
+        <span id="timeDuration">0:00</span>
+      </div>
+    </div>
+    <div class="player-right">
+      <button class="icon-btn" id="btnEq" title="Equalizer" type="button"><i class="fa-solid fa-sliders"></i></button>
+      <button class="icon-btn" id="btnLyrics" title="Lyrics" type="button"><i class="fa-solid fa-align-left"></i></button>
+      <button class="icon-btn" id="btnRadio" title="Start radio" type="button"><i class="fa-solid fa-tower-broadcast"></i></button>
+      <button class="icon-btn" id="btnListenTogether" title="Listen Together" type="button"><i class="fa-solid fa-people-group"></i></button>
+      <div class="speed-wrap" title="Playback speed">
+        <button class="speed-btn" id="btnSpeed" type="button">1×</button>
+      </div>
+      <button class="icon-btn" id="btnQueue" title="Queue" type="button"><i class="fa-solid fa-list-ol"></i></button>
+      <div class="volume-wrap">
+        <button class="icon-btn" id="btnVolume" type="button"><i class="fa-solid fa-volume-high" id="volumeIcon"></i></button>
+        <div class="volume-slider"><input type="range" id="volumeBar" min="0" max="100" value="80"></div>
+      </div>
+    </div>
+  </footer>
+
+  <!-- Context menu -->
+  <div class="ctx-menu" id="ctxMenu" hidden>
+    <button type="button" data-act="play"><i class="fa-solid fa-play"></i> Play now</button>
+    <button type="button" data-act="next"><i class="fa-solid fa-forward"></i> Play next</button>
+    <button type="button" data-act="queue"><i class="fa-solid fa-list"></i> Add to queue</button>
+    <button type="button" data-act="radio"><i class="fa-solid fa-tower-broadcast"></i> Start radio</button>
+    <button type="button" data-act="like"><i class="fa-solid fa-heart"></i> Like / Unlike</button>
+    <button type="button" data-act="playlist"><i class="fa-solid fa-plus"></i> Add to playlist</button>
+    <button type="button" data-act="share"><i class="fa-solid fa-share-nodes"></i> Share</button>
+  </div>
+
+  <!-- Modals -->
+  <div class="modal-backdrop" id="modalBackdrop" hidden>
+    <div class="modal glass-panel" id="modalRoot" role="dialog" aria-modal="true"></div>
+  </div>
+
+  <div id="loadingOverlay" class="loading-overlay hidden">
+    <div class="loader-ring"></div>
+    <div class="loader"><div class="loader-bar"></div><div class="loader-bar"></div><div class="loader-bar"></div><div class="loader-bar"></div></div>
+  </div>
+
+  <!-- YouTube IFrame API is injected lazily only when fallback play is needed (core.js) -->
+  <script defer src="/static/js/core.js?v=3"></script>
+  <script defer src="/static/js/browse.js?v=6"></script>
+  <script defer src="/static/js/lyrics.js"></script>
+  <script defer src="/static/js/ui.js"></script>
+  <script defer src="/static/js/player.js?v=6"></script>
+  <script defer src="/static/js/eq.js?v=6"></script>
+  <script defer src="/static/js/fullplayer.js?v=5"></script>
+  <script defer src="/static/js/features.js"></script>
+  <script defer src="/static/js/room.js?v=1"></script>
+  <script defer src="/static/js/init.js?v=5"></script>
+</body>
+</html>
