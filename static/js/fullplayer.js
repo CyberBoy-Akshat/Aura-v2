@@ -73,6 +73,7 @@ function updateNpfDisplay() {
   // lyrics box when lyrics exist (synced karaoke or plain), else keep the art.
   // Also catch tracks whose video stream genuinely can't play (dead stream)
   // so we never leave a blank frame when lyrics are available.
+  // For unsynced/script lyrics on image-only tracks, show only the cover art.
   if (imageOnly || (videoDead && (hasSynced || hasPlain))) {
     if (hasSynced) {
       computeWordTimings();
@@ -81,8 +82,9 @@ function updateNpfDisplay() {
       showNpfLyrics();
       syncNpfLyrics(getPlaybackEl().currentTime || 0);
     } else if (hasPlain) {
-      renderPlainNpfLyrics();
-      showNpfLyrics();
+      // Plain (unsynced/script) lyrics: don't show in box for image-only tracks
+      // Just show the cover art/image only
+      hideNpfLyrics();
     } else {
       hideNpfLyrics();
     }

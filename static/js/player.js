@@ -170,11 +170,13 @@ async function playViaAudio(videoId) {
 
   // If audio extraction fails, use the same-origin combined video stream as
   // the audible source. It remains compatible with Web Audio, unlike a
-  // cross-origin YouTube iframe fallback.
+  // cross-origin YouTube iframe fallback. EQ is now applied to video streams too.
   try {
     const videoData = await api(`/api/video/${videoId}`);
-    if (videoData?.url && videoData.imageOnly !== true) {
-      await tryPlaySrc(videoData.url, true, mediaVideo);
+    if (videoData?.url) {
+      // Apply EQ even for image-only videos (static album art with audio)
+      const eqNeeded = (settings.eqPreset || "flat") !== "flat" || eqConnected;
+      await tryPlaySrc(videoData.url, eqNeeded, mediaVideo);
       if (audioCtx?.state === "suspended") { try { await audioCtx.resume(); } catch {} }
       if (eqConnected) applyEqPreset(settings.eqPreset || "flat");
       isPlaying = true;
@@ -233,6 +235,8 @@ async function loadSuggestions(videoId) {
 }
 
 function handleEnded() {
+  // Don't auto-advance when host is in a Listen Together room — let them control
+  if (listenRoom?.host) return;
   if (repeatMode === 2) {
     if (useAudioEl) { const media = getPlaybackEl(); media.currentTime = 0; media.play(); }
     else if (ytPlayer?.seekTo) { ytPlayer.seekTo(0); ytPlayer.playVideo(); }

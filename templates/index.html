@@ -375,7 +375,7 @@
     <div class="npf-content">
       <div class="npf-art" id="npfArt">
         <img id="npfThumb" src="" alt="">
-        <video id="npfVideo" class="npf-video" muted playsinline></video>
+        <video id="npfVideo" class="npf-video" muted playsinline webkit-playsinline></video>
         <div id="npfEmbed" class="npf-embed"></div>
         <div class="npf-lyrics" id="npfLyrics"></div>
         <div class="npf-vinyl"></div>
@@ -435,9 +435,9 @@
     <div id="ytPlayer"></div>
   </div>
 
-  <audio id="audioPlayer" preload="auto" crossorigin="anonymous" playsinline></audio>
+  <audio id="audioPlayer" preload="auto" crossorigin="anonymous" playsinline webkit-playsinline></audio>
   <!-- Extracted video fallback: audio is routed through Web Audio EQ; the full-player video remains a muted visual layer. -->
-  <video id="mediaVideo" preload="none" crossorigin="anonymous" playsinline aria-hidden="true" style="position:fixed;width:1px;height:1px;opacity:0;pointer-events:none;left:-10px;top:-10px;"></video>
+  <video id="mediaVideo" preload="auto" crossorigin="anonymous" playsinline webkit-playsinline aria-hidden="true" style="position:fixed;width:1px;height:1px;opacity:0;pointer-events:none;left:-10px;top:-10px;"></video>
 
   <!-- Player Bar -->
   <footer class="player-bar glass-bar" id="playerBar">

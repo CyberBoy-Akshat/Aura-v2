@@ -20,7 +20,8 @@ const eqSources = new WeakMap();
 const eqWiredSources = new WeakSet();
 function ensureEqGraph(sourceEl = getPlaybackEl()) {
   if (!sourceEl) return false;
-  if (eqConnected && eqSourceEl === sourceEl) return true;
+  // Always rebuild the graph when switching between audio and video sources
+  // to ensure EQ works for both songs and videos
   try {
     const AC = window.AudioContext || window.webkitAudioContext;
     if (!AC || !audioEl) return false;
