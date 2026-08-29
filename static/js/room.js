@@ -1,5 +1,6 @@
 /* --- LISTEN TOGETHER: lightweight room sync for Vercel-friendly sessions --- */
 let listenRoom = null;
+// Don't overwrite window.listenRoom here — it's set after room creation/join
 let listenPollTimer = null;
 let listenSyncTimer = null;
 let listenApplyingRemote = false;
@@ -99,6 +100,7 @@ async function createListenRoom() {
     const name = localStorage.getItem("auraRoomName") || "Aura host";
     const room = await roomApi("", { method: "POST", body: JSON.stringify({ name }) });
     listenRoom = { ...room, host: true, joined: true };
+    window.listenRoom = listenRoom;  // expose to other modules
     localStorage.setItem("auraListenRoom", JSON.stringify({ code: room.code, hostToken: room.hostToken, host: true }));
     startListenRoom();
     openModal(`<h3>Listen Together</h3><p class="modal-sub">Share this code and press play together.</p><div id="listenRoomRoot"></div>`);
@@ -113,6 +115,7 @@ async function joinListenRoom() {
   try {
     const room = await roomApi(`/${encodeURIComponent(code)}/join`, { method: "POST", body: JSON.stringify({}) });
     listenRoom = { ...room, host: false, joined: true };
+    window.listenRoom = listenRoom;  // expose to other modules
     localStorage.setItem("auraListenRoom", JSON.stringify({ code: room.code, host: false }));
     startListenRoom();
     openModal(`<h3>Listen Together</h3><p class="modal-sub">You joined the room.</p><div id="listenRoomRoot"></div>`);
@@ -163,14 +166,29 @@ async function applyRemoteRoomState(state) {
   if (track?.id && track.id !== currentVideoId) {
     listenApplyingRemote = true;
     try {
-      await playSongFromList([normalizeSong(track)], 0);
+      // Check if track already exists in queue to avoid resetting
+      const existingIdx = queue.findIndex(s => s.id === track.id);
+      if (existingIdx >= 0) {
+        // Track exists, just jump to it
+        await playSong(existingIdx);
+      } else {
+        // New track, load it - preserve position from room state
+        const normalizedTrack = normalizeSong(track);
+        await playSongFromList([normalizedTrack], 0);
+      }
       await new Promise(r => setTimeout(r, 600));
     } finally { listenApplyingRemote = false; }
   }
   const media = typeof getPlaybackEl === "function" ? getPlaybackEl() : null;
   if (!media || !track || track.id !== currentVideoId) return;
+  // Calculate expected position based on room state timestamp
   const expected = Math.max(0, Number(state.position) || 0) + (state.status === "playing" ? Math.max(0, (Date.now() / 1000) - (Number(state.updatedAt) || Date.now() / 1000)) : 0);
-  if (Number.isFinite(expected) && Math.abs((media.currentTime || 0) - expected) > 1.2) media.currentTime = expected;
+  // Sync video to audio timeline immediately when applying remote state
+  if (Number.isFinite(expected)) {
+    media.currentTime = expected;
+    // Also sync the full-player video if open
+    try { seekNpfTo(expected); } catch {}
+  }
   if (state.status === "playing" && !isPlaying) { listenApplyingRemote = true; try { await media.play(); } catch {} listenApplyingRemote = false; }
   if (state.status !== "playing" && isPlaying) { listenApplyingRemote = true; try { media.pause(); } catch {} listenApplyingRemote = false; }
 }
@@ -205,6 +223,7 @@ try {
   if (saved?.code) {
     roomApi(`/${encodeURIComponent(saved.code)}`).then(room => {
       listenRoom = { ...room, host: Boolean(saved.host), hostToken: saved.hostToken, joined: true };
+      window.listenRoom = listenRoom;  // expose to other modules
       startListenRoom();
     }).catch(() => localStorage.removeItem("auraListenRoom"));
   }
