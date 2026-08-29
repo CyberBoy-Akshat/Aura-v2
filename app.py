@@ -89,6 +89,8 @@ def _room_payload(room, include_token=False):
         "hostName": room.get("hostName", "Host"),
         "members": room.get("members", 1),
         "state": room.get("state", {}),
+        "revision": room.get("revision", (room.get("state") or {}).get("revision", 0)),
+        "storage": "kv" if _kv_enabled() else "memory",
         "updatedAt": room.get("updatedAt", 0),
     }
     if include_token:
@@ -562,7 +564,8 @@ def create_room():
         "hostToken": host_token,
         "hostName": host_name,
         "members": 1,
-        "state": {"status": "paused", "position": 0, "updatedAt": time.time(), "track": None},
+        "revision": 1,
+        "state": {"status": "paused", "position": 0, "updatedAt": time.time(), "track": None, "revision": 1},
         "updatedAt": time.time(),
     }
     _room_set(code, room)
@@ -602,13 +605,16 @@ def update_room_state(code):
     if body.get("hostToken") != room["hostToken"]:
         return _room_response({"error": "Only the host can control playback"}, 403)
     state = body.get("state") or {}
+    revision = int(room.get("revision") or (room.get("state") or {}).get("revision") or 0) + 1
+    room["revision"] = revision
     room["state"] = {
         "status": "playing" if state.get("status") == "playing" else "paused",
         "position": max(0, float(state.get("position") or 0)),
         "updatedAt": time.time(),
         "track": state.get("track") if isinstance(state.get("track"), dict) else None,
+        "revision": revision,
     }
-    room["updatedAt"] = time.time()
+    room["updatedAt"] = room["state"]["updatedAt"]
     _room_set(code, room)
     return _room_response(_room_payload(room))
 @app.delete("/api/rooms/<code>")
