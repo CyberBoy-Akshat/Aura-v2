@@ -231,6 +231,8 @@ function playViaYouTube(videoId) {
   ytFallbackId = videoId;
   ytFallbackErrorId = null;
   ytFallbackResolvedFor = null;
+  ytFallbackCandidates = [];
+  ytFallbackCandidateIndex = -1;
   activeMediaEl = null;
   try { audioEl.pause(); audioEl.removeAttribute("src"); audioEl.load(); } catch {}
   try { mediaVideo?.pause(); mediaVideo?.removeAttribute("src"); mediaVideo?.load(); } catch {}

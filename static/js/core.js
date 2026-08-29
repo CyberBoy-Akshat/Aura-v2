@@ -7,6 +7,7 @@ const $$ = s => document.querySelectorAll(s);
 let queue = [], queueIdx = -1;
 let ytPlayer = null, ytReady = false, ytApiLoaded = false;
 let ytFallbackId = null, ytFallbackErrorId = null, ytFallbackResolvedFor = null;
+let ytFallbackCandidates = [], ytFallbackCandidateIndex = -1;
 let isPlaying = false, progressTimer = null;
 let shuffleOn = false, repeatMode = 0;
 let history = JSON.parse(localStorage.getItem("ythistory") || "[]");
@@ -128,30 +129,42 @@ function createPlayer() {
           if (typeof showToast === "function") showToast("Tap play to start playback");
         },
         onError: () => {
-          // Restricted/region-locked music IDs can fail in the embed even when
-          // the catalogue entry is valid. Try one nearby searchable match, but
-          // never recurse: the room and UI continue to use the original ID.
+          // Restricted/region-locked IDs can fail in the embed even when the
+          // catalogue entry is valid. Try several distinct search candidates;
+          // only the original catalogue ID is kept in room state.
           const originalId = currentVideoId || ytFallbackId;
-          ytFallbackErrorId = ytFallbackId || originalId;
+          const failedId = ytFallbackId || originalId;
+          ytFallbackErrorId = failedId;
           isPlaying = false;
           updatePlayBtn();
           stopProgress();
-          if (ytFallbackResolvedFor === originalId || typeof api !== "function") {
-            if (typeof showToast === "function") showToast("This video cannot be played here");
-            return;
-          }
+          const next = () => {
+            if (currentVideoId !== originalId || !ytPlayer) return;
+            ytFallbackCandidateIndex += 1;
+            const nextId = ytFallbackCandidates[ytFallbackCandidateIndex];
+            if (!nextId) {
+              if (typeof showToast === "function") showToast("This video cannot be played here");
+              return;
+            }
+            ytFallbackId = nextId;
+            ytFallbackErrorId = null;
+            try { ytPlayer.mute?.(); ytPlayer.loadVideoById(nextId); ytPlayer.playVideo?.(); } catch { next(); }
+          };
+          if (ytFallbackResolvedFor === originalId) { next(); return; }
           ytFallbackResolvedFor = originalId;
           const song = queue[queueIdx] || {};
           const query = `${song.title || ""} ${song.artist || ""}`.trim();
-          if (!query) return;
-          api(`/api/search?q=${encodeURIComponent(query)}&filter=songs`).then(results => {
-            const alt = (Array.isArray(results) ? results : [])
-              .find(item => item?.id && item.id !== originalId);
-            if (!alt || currentVideoId !== originalId || !ytPlayer) return;
-            ytFallbackId = alt.id;
-            ytFallbackErrorId = null;
-            try { ytPlayer.mute?.(); ytPlayer.loadVideoById(alt.id); ytPlayer.playVideo?.(); } catch {}
-            if (typeof showToast === "function") showToast("Using a playable audio match");
+          if (!query || typeof api !== "function") { if (typeof showToast === "function") showToast("This video cannot be played here"); return; }
+          ytFallbackCandidates = [originalId];
+          ytFallbackCandidateIndex = 0;
+          api(`/api/search_all?q=${encodeURIComponent(query)}`).then(results => {
+            const ids = (Array.isArray(results) ? results : [])
+              .filter(item => item?.id && item.id !== originalId && (item.type === "song" || item.type === "video"))
+              .map(item => item.id)
+              .filter((id, i, all) => all.indexOf(id) === i)
+              .slice(0, 10);
+            ytFallbackCandidates.push(...ids);
+            next();
           }).catch(() => {
             if (typeof showToast === "function") showToast("This video cannot be played here");
           });
