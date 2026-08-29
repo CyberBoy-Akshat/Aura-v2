@@ -1,26 +1,32 @@
 /* --- PLAYER: playback core, queue, progress, controls --- */
 
 // ── Player ─────────────────────────────────────────────────────────────────
-async function playSongFromList(songs, idx) {
+let playbackRequestId = 0;
+
+async function playSongFromList(songs, idx, options = {}) {
   const song = normalizeSong(songs[idx]);
   if (!song) return;
   // play the song, then build queue from suggestions
   currentVideoId = song.id;
   queueIdx = 0;
   queue = [song];
-  await playSong(0);
-  // load suggestions as the new queue
-  try {
-    const sugs = (await api(`/api/suggestions/${song.id}`)).map(normalizeSong);
-    const existing = new Set([song.id]);
-    queue = [song, ...sugs.filter(s => s.id && !existing.has(s.id))];
-    renderQueue();
-  } catch {}
+  await playSong(0, options);
+  // Load suggestions as the new queue for a local play. Remote room changes
+  // intentionally keep the guest's queue stable; the host remains authoritative.
+  if (options.remote !== true) {
+    try {
+      const sugs = (await api(`/api/suggestions/${song.id}`)).map(normalizeSong);
+      const existing = new Set([song.id]);
+      queue = [song, ...sugs.filter(s => s.id && !existing.has(s.id))];
+      renderQueue();
+    } catch {}
+  }
 }
 
-async function playSong(idx) {
+async function playSong(idx, options = {}) {
   if (idx < 0 || idx >= queue.length) return;
-  if (typeof isListenTogetherGuest === "function" && isListenTogetherGuest()) { showToast("The host controls this room"); return; }
+  const remotePlayback = options.remote === true;
+  if (!remotePlayback && typeof isListenTogetherGuest === "function" && isListenTogetherGuest()) { showToast("The host controls this room"); return; }
   queueIdx = idx;
   const song = normalizeSong(queue[idx]);
   queue[idx] = song;
@@ -66,8 +72,10 @@ async function playSong(idx) {
   $$(".song-card").forEach(c => c.classList.remove("active"));
   $$(`[data-id="${song.id}"]`).forEach(c => c.classList.add("active"));
 
-  // stop current media source before switching tracks
-  audioEl.pause(); audioEl.src = "";
+  // Stop current media before switching tracks. Never assign an empty src:
+  // Chromium resolves an empty media URL to the current document, producing
+  // MEDIA_ELEMENT_ERROR and an unnecessary request to the Aura page.
+  try { audioEl.pause(); audioEl.removeAttribute("src"); audioEl.load(); } catch {}
   mediaVideo?.pause();
   mediaVideo?.removeAttribute("src");
   try { mediaVideo?.load(); } catch {}
@@ -75,8 +83,10 @@ async function playSong(idx) {
   useAudioEl = false;
   stopNpfVideo();
 
-  // PRIMARY: play via yt-dlp audio (no ads!)
-  playViaAudio(song.id);
+  // PRIMARY: play via yt-dlp audio (no ads!). Keep this call non-blocking so
+  // the controls remain responsive while the stream resolves.
+  const requestId = ++playbackRequestId;
+  playViaAudio(song.id, requestId).catch(err => console.warn("playback start", err));
 
   // Record one listening session per calendar day for the streak badge.
   if (typeof recordListeningStreak === "function") recordListeningStreak();
@@ -87,8 +97,10 @@ async function playSong(idx) {
   history.unshift(song);
   saveHistory();
 
-  // auto-suggestions
-  if (queue.length < 8) loadSuggestions(song.id);
+  // Auto-suggestions are deliberately disabled for a remote room change until
+  // the host queue has been applied; this prevents a guest from rebuilding a
+  // one-track queue and falling out of sync when the host advances.
+  if (!remotePlayback && queue.length < 8) loadSuggestions(song.id);
   renderQueue();
   updateMiniEq();
   applyPlaybackRate();
@@ -97,18 +109,21 @@ async function playSong(idx) {
   if ($("#nowPlayingFull").classList.contains("open")) updateNpfDisplay();
 }
 
-async function playViaAudio(videoId) {
+async function playViaAudio(videoId, requestId = playbackRequestId) {
   if (!videoId) return;
+  const isCurrentRequest = () => requestId === playbackRequestId && currentVideoId === videoId;
   const vol = parseInt($("#volumeBar")?.value || settings.volume || 80, 10);
   audioRetrying = true;
 
   const tryPlaySrc = async (src, allowEq, mediaEl = audioEl) => {
+    if (!isCurrentRequest()) return;
     useAudioEl = true;
     activeMediaEl = mediaEl;
     try { ytPlayer?.pauseVideo?.(); } catch {}
     if (mediaEl !== audioEl) audioEl.pause();
     if (mediaEl !== mediaVideo) mediaVideo?.pause();
-    mediaEl.crossOrigin = "anonymous";
+    if (allowEq) mediaEl.crossOrigin = "anonymous";
+    else mediaEl.removeAttribute("crossorigin");
     mediaEl.pause();
     // Load the same-origin source first, then bind the element to Web Audio.
     // This keeps the graph attached to the media element that will actually
@@ -126,8 +141,10 @@ async function playViaAudio(videoId) {
     } else {
       mediaEl.volume = vol / 100;
     }
+    if (!isCurrentRequest()) return;
     const p = mediaEl.play();
     if (p && typeof p.then === "function") await p;
+    if (!isCurrentRequest()) { try { mediaEl.pause(); } catch {} return; }
     if (audioCtx?.state === "suspended") {
       try { await audioCtx.resume(); } catch {}
     }
@@ -140,6 +157,12 @@ async function playViaAudio(videoId) {
 
   try {
     const data = await api(`/api/audio/${videoId}`);
+    if (!isCurrentRequest()) return;
+    if (data?.mode === "youtube" || data?.fallback === "youtube") {
+      audioRetrying = false;
+      playViaYouTube(videoId);
+      return;
+    }
 
     // ALWAYS play through the same-origin proxy. Direct googlevideo URLs lack
     // CORS, so binding them to the Web Audio graph outputs silence — and the
@@ -154,13 +177,24 @@ async function playViaAudio(videoId) {
         return;
       } catch (e1) {
         console.warn("Proxy/EQ play failed", e1);
-        // Retry without graph
+        // Retry without graph. This preserves audio playback if the graph was
+        // blocked by a browser policy but the media element itself is usable.
         try {
           await tryPlaySrc(primary, false);
           audioRetrying = false;
           return;
         } catch (e2) {
           console.warn("Proxy play failed", e2);
+          // A resolved direct URL is useful as a final playback fallback on
+          // browsers that accept cross-origin media. EQ stays on the proxy path
+          // because direct googlevideo URLs do not expose CORS to Web Audio.
+          if (data?.direct && !eqConnected) {
+            try {
+              await tryPlaySrc(data.direct, false);
+              audioRetrying = false;
+              return;
+            } catch (e3) { console.warn("Direct media play failed", e3); }
+          }
         }
       }
     }
@@ -170,13 +204,12 @@ async function playViaAudio(videoId) {
 
   // If audio extraction fails, use the same-origin combined video stream as
   // the audible source. It remains compatible with Web Audio, unlike a
-  // cross-origin YouTube iframe fallback. EQ is now applied to video streams too.
+  // cross-origin YouTube iframe fallback.
   try {
     const videoData = await api(`/api/video/${videoId}`);
-    if (videoData?.url) {
-      // Apply EQ even for image-only videos (static album art with audio)
-      const eqNeeded = (settings.eqPreset || "flat") !== "flat" || eqConnected;
-      await tryPlaySrc(videoData.url, eqNeeded, mediaVideo);
+    if (!isCurrentRequest()) return;
+    if (videoData?.url && videoData.imageOnly !== true) {
+      await tryPlaySrc(videoData.url, true, mediaVideo);
       if (audioCtx?.state === "suspended") { try { await audioCtx.resume(); } catch {} }
       if (eqConnected) applyEqPreset(settings.eqPreset || "flat");
       isPlaying = true;
@@ -190,13 +223,13 @@ async function playViaAudio(videoId) {
   } finally {
     audioRetrying = false;
   }
-  playViaYouTube(videoId);
+  if (isCurrentRequest()) playViaYouTube(videoId);
 }
 
 function playViaYouTube(videoId) {
   useAudioEl = false;
   activeMediaEl = null;
-  try { audioEl.pause(); } catch {}
+  try { audioEl.pause(); audioEl.removeAttribute("src"); audioEl.load(); } catch {}
   try { mediaVideo?.pause(); mediaVideo?.removeAttribute("src"); mediaVideo?.load(); } catch {}
   const vol = parseInt($("#volumeBar")?.value || settings.volume || 80, 10);
   const go = () => {
@@ -235,8 +268,6 @@ async function loadSuggestions(videoId) {
 }
 
 function handleEnded() {
-  // Don't auto-advance when host is in a Listen Together room — let them control
-  if (listenRoom?.host) return;
   if (repeatMode === 2) {
     if (useAudioEl) { const media = getPlaybackEl(); media.currentTime = 0; media.play(); }
     else if (ytPlayer?.seekTo) { ytPlayer.seekTo(0); ytPlayer.playVideo(); }
@@ -280,6 +311,8 @@ function updatePlayBtn() {
   const cls = isPlaying ? "fa-solid fa-pause" : "fa-solid fa-play";
   $("#btnPlay i").className = cls;
   $("#npfPlay i").className = cls;
+  $("#playerBar")?.classList.toggle("is-live", isPlaying);
+  if ("mediaSession" in navigator) navigator.mediaSession.playbackState = isPlaying ? "playing" : "paused";
 }
 
 function updateLikeBtn(id) {
@@ -416,13 +449,34 @@ $("#npfProgress").addEventListener("change", () => seekTo(parseInt($("#npfProgre
 
 function setVolume(v) {
   if (ytPlayer?.setVolume) ytPlayer.setVolume(v);
-  if (eqGain) {
+  const media = getPlaybackEl();
+  if (eqGain && eqConnected && media) {
     eqGain.gain.value = v / 100;
-    getPlaybackEl().volume = 1;
-  } else {
-    getPlaybackEl().volume = v / 100;
+    media.volume = 1;
+  } else if (media) {
+    media.volume = v / 100;
   }
   $("#volumeIcon").className = v === 0 ? "fa-solid fa-volume-xmark" : v < 40 ? "fa-solid fa-volume-low" : "fa-solid fa-volume-high";
   settings.volume = v;
   saveSettings();
 }
+
+// Mobile browsers may suspend Web Audio when the page is backgrounded. The
+// HTMLMediaElement remains the source of truth; resume the context and gently
+// recover playback without resetting the currentTime.
+document.addEventListener("visibilitychange", () => {
+  if (!document.hidden && isPlaying) {
+    if (audioCtx?.state === "suspended") audioCtx.resume().catch(() => {});
+    const media = getPlaybackEl();
+    if (useAudioEl && media && media.paused) {
+      media.play().catch(() => {});
+    }
+    try { npfVideoSync(true); } catch {}
+  }
+});
+window.addEventListener("pageshow", () => {
+  if (!isPlaying) return;
+  if (audioCtx?.state === "suspended") audioCtx.resume().catch(() => {});
+  const media = getPlaybackEl();
+  if (useAudioEl && media?.paused) media.play().catch(() => {});
+});

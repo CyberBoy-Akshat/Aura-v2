@@ -14,7 +14,7 @@
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Outfit:wght@360;500;650;760&family=Sora:wght@500;700;800&display=swap">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
   </noscript>
-  <link rel="stylesheet" href="/static/css/style.css?v=10">
+  <link rel="stylesheet" href="/static/css/style.css?v=12">
 </head>
 <body>
   <!-- NeonWave-style aurora field -->
@@ -371,11 +371,11 @@
   <div class="now-playing-full" id="nowPlayingFull">
     <div class="npf-bg" id="npfBg"></div>
     <div class="npf-glow"></div>
-    <button class="npf-close" id="npfClose" type="button"><i class="fa-solid fa-chevron-down"></i></button>
+    <button class="npf-close" id="npfClose" type="button" aria-label="Close now playing"><i class="fa-solid fa-chevron-down"></i></button>
     <div class="npf-content">
       <div class="npf-art" id="npfArt">
         <img id="npfThumb" src="" alt="">
-        <video id="npfVideo" class="npf-video" muted playsinline webkit-playsinline></video>
+        <video id="npfVideo" class="npf-video" muted playsinline></video>
         <div id="npfEmbed" class="npf-embed"></div>
         <div class="npf-lyrics" id="npfLyrics"></div>
         <div class="npf-vinyl"></div>
@@ -420,9 +420,9 @@
         <p class="section-kicker">Sound design</p>
         <h3>Equalizer</h3>
       </div>
-      <button class="icon-btn" id="closeEq" type="button"><i class="fa-solid fa-xmark"></i></button>
+      <button class="icon-btn" id="closeEq" type="button" aria-label="Close equalizer"><i class="fa-solid fa-xmark"></i></button>
     </div>
-    <p class="eq-lead">Presets apply to extracted audio playback (HTML stream). 8D pans in stereo.</p>
+    <p class="eq-lead">Live sound shaping for songs and videos. 8D pans in stereo without restarting playback.</p>
     <div class="eq-presets" id="eqPresets"></div>
     <div class="eq-viz" id="eqViz" aria-hidden="true">
       <span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span>
@@ -435,9 +435,9 @@
     <div id="ytPlayer"></div>
   </div>
 
-  <audio id="audioPlayer" preload="auto" crossorigin="anonymous" playsinline webkit-playsinline></audio>
+  <audio id="audioPlayer" preload="auto" crossorigin="anonymous" playsinline x-webkit-airplay="allow"></audio>
   <!-- Extracted video fallback: audio is routed through Web Audio EQ; the full-player video remains a muted visual layer. -->
-  <video id="mediaVideo" preload="auto" crossorigin="anonymous" playsinline webkit-playsinline aria-hidden="true" style="position:fixed;width:1px;height:1px;opacity:0;pointer-events:none;left:-10px;top:-10px;"></video>
+  <video id="mediaVideo" preload="none" crossorigin="anonymous" playsinline aria-hidden="true" style="position:fixed;width:1px;height:1px;opacity:0;pointer-events:none;left:-10px;top:-10px;"></video>
 
   <!-- Player Bar -->
   <footer class="player-bar glass-bar" id="playerBar">
@@ -479,7 +479,7 @@
       </div>
       <button class="icon-btn" id="btnQueue" title="Queue" type="button"><i class="fa-solid fa-list-ol"></i></button>
       <div class="volume-wrap">
-        <button class="icon-btn" id="btnVolume" type="button"><i class="fa-solid fa-volume-high" id="volumeIcon"></i></button>
+        <button class="icon-btn" id="btnVolume" type="button" title="Mute or unmute" aria-label="Mute or unmute"><i class="fa-solid fa-volume-high" id="volumeIcon"></i></button>
         <div class="volume-slider"><input type="range" id="volumeBar" min="0" max="100" value="80"></div>
       </div>
     </div>
@@ -507,15 +507,15 @@
   </div>
 
   <!-- YouTube IFrame API is injected lazily only when fallback play is needed (core.js) -->
-  <script defer src="/static/js/core.js?v=3"></script>
+  <script defer src="/static/js/core.js?v=4"></script>
   <script defer src="/static/js/browse.js?v=6"></script>
-  <script defer src="/static/js/lyrics.js"></script>
+  <script defer src="/static/js/lyrics.js?v=2"></script>
   <script defer src="/static/js/ui.js"></script>
-  <script defer src="/static/js/player.js?v=6"></script>
-  <script defer src="/static/js/eq.js?v=6"></script>
-  <script defer src="/static/js/fullplayer.js?v=5"></script>
+  <script defer src="/static/js/player.js?v=9"></script>
+  <script defer src="/static/js/eq.js?v=9"></script>
+  <script defer src="/static/js/fullplayer.js?v=8"></script>
   <script defer src="/static/js/features.js"></script>
-  <script defer src="/static/js/room.js?v=1"></script>
+  <script defer src="/static/js/room.js?v=4"></script>
   <script defer src="/static/js/init.js?v=5"></script>
 </body>
 </html>

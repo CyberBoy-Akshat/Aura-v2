@@ -37,6 +37,31 @@ const loading = $("#loadingOverlay");
 const audioEl = $("#audioPlayer");
 const mediaVideo = $("#mediaVideo");
 function getPlaybackEl() { return activeMediaEl || audioEl; }
+// One clock for native media and the YouTube fallback. Room state, progress,
+// lyrics, Media Session, and fullscreen visuals must never read a dormant
+// <audio> element while the fallback iframe is actually playing.
+function getPlaybackTime() {
+  if (useAudioEl) {
+    const media = getPlaybackEl();
+    return media && Number.isFinite(media.currentTime) ? media.currentTime : 0;
+  }
+  try {
+    const t = ytPlayer?.getCurrentTime?.();
+    if (Number.isFinite(t)) return t;
+  } catch {}
+  return 0;
+}
+function getPlaybackDuration() {
+  if (useAudioEl) {
+    const media = getPlaybackEl();
+    return media && Number.isFinite(media.duration) ? media.duration : 0;
+  }
+  try {
+    const d = ytPlayer?.getDuration?.();
+    if (Number.isFinite(d)) return d;
+  } catch {}
+  return 0;
+}
 let audioRetrying = false; // set while playViaAudio is switching strategies
 if (audioEl) {
   audioEl.addEventListener("error", () => {
@@ -55,7 +80,14 @@ window.onYouTubeIframeAPIReady = () => { ytApiLoaded = true; createPlayer(); };
 let _ytApiInjected = false;
 
 function ensureYtApi() {
-  if (_ytApiInjected || window.YT) return;
+  if (window.YT?.Player) {
+    // Some browsers expose YT before firing the global callback. Treat the
+    // API as ready and create the player instead of leaving an empty iframe.
+    ytApiLoaded = true;
+    createPlayer();
+    return;
+  }
+  if (_ytApiInjected) return;
   _ytApiInjected = true;
   const s = document.createElement("script");
   s.src = "https://www.youtube.com/iframe_api";
@@ -67,10 +99,18 @@ function createPlayer() {
   if (ytPlayer || !ytApiLoaded) return;
   try {
     ytPlayer = new YT.Player("ytPlayer", {
-      height: "1", width: "1", videoId: "",
-      playerVars: { autoplay: 0, controls: 0, disablekb: 1, iv_load_policy: 3, modestbranding: 1, playsinline: 1 },
+      height: "1", width: "1", videoId: currentVideoId || "",
+      playerVars: { autoplay: currentVideoId ? 1 : 0, controls: 0, disablekb: 1, iv_load_policy: 3, modestbranding: 1, playsinline: 1, origin: location.origin },
       events: {
-        onReady: () => { ytReady = true; if (currentVideoId) ytPlayer.loadVideoById(currentVideoId); },
+        onReady: () => {
+          ytReady = true;
+          if (currentVideoId) {
+            try {
+              ytPlayer.loadVideoById(currentVideoId);
+              if (isPlaying || !useAudioEl) ytPlayer.playVideo?.();
+            } catch {}
+          }
+        },
         onStateChange: e => {
           if (e.data === YT.PlayerState.ENDED) handleEnded();
           if (!useAudioEl) { isPlaying = e.data === YT.PlayerState.PLAYING; updatePlayBtn(); isPlaying ? startProgress() : stopProgress(); npfVideoSync(isPlaying); }

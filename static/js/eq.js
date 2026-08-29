@@ -26,6 +26,10 @@ function ensureEqGraph(sourceEl = getPlaybackEl()) {
     const AC = window.AudioContext || window.webkitAudioContext;
     if (!AC || !audioEl) return false;
     audioCtx = audioCtx || new AC();
+    // Resume inside the same interaction that requested the EQ. iOS Safari
+    // otherwise leaves a successfully-created graph suspended until the next
+    // gesture, which sounds like the preset is doing nothing.
+    if (audioCtx.state === "suspended") audioCtx.resume().catch(() => {});
     // Bind lazily to the element that is actually carrying the current track.
     // Each HTMLMediaElement can only be wrapped once, so reuse its source node.
     mediaSource = eqSources.get(sourceEl);
@@ -59,6 +63,9 @@ function ensureEqGraph(sourceEl = getPlaybackEl()) {
       eqGraphBuilt = true;
     }
     sourceEl.volume = 1;
+    // A graph may be reused after switching audio -> video. Always reassert the
+    // destination gain and media volume so both paths are audible and EQ'd.
+    eqGain.gain.value = parseInt($("#volumeBar")?.value || settings.volume || 80, 10) / 100;
     eqConnected = true;
     return true;
   } catch (e) {
@@ -151,7 +158,7 @@ async function applyEqPreset(id) {
   // Audio is always served via the same-origin proxy (see player.js), so
   // applying/switching a preset is purely a Web Audio operation — the media
   // element, its src, and the muted video are never touched → no restarts.
-  const connected = ensureEqGraph();
+  const connected = ensureEqGraph(getPlaybackEl());
   if (audioCtx?.state === "suspended") { try { await audioCtx.resume(); } catch {} }
   // If graph was just created on a playing stream, filters start at 0 — apply now
   if (connected) setEqGains(preset);
@@ -269,8 +276,10 @@ function updateMediaSession(song) {
   navigator.mediaSession.setActionHandler("nexttrack", playNext);
   navigator.mediaSession.setActionHandler("seekto", details => {
     if (details.seekTime == null) return;
-    if (useAudioEl) getPlaybackEl().currentTime = details.seekTime;
+    const media = getPlaybackEl();
+    if (useAudioEl && media) media.currentTime = details.seekTime;
     else ytPlayer?.seekTo?.(details.seekTime, true);
+    try { seekNpfTo(details.seekTime); } catch {}
   });
 }
 

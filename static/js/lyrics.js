@@ -49,7 +49,8 @@ async function loadLyrics(song) {
     lyricsLoadedFor = song.id;
     body.innerHTML = `<p class="lyrics-placeholder">Lyrics unavailable — check the track title</p>`;
   }
-  // Full player refresh: word-by-word lyrics box when synced, otherwise image/video.
+  // Fullscreen is reserved for timed karaoke. Plain/script lyrics remain
+  // available in the dedicated lyrics panel, never inside the fullscreen art.
   if (isCurrent() && $("#nowPlayingFull").classList.contains("open")) updateNpfDisplay();
 }
 

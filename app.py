@@ -636,7 +636,16 @@ def api_audio(video_id: str):
             "url": f"/api/stream/{video_id}",
             "direct": url,
         })
-    return jsonify({"error": "Could not extract audio"}), 404
+    # Vercel datacenter IPs can be rejected by YouTube’s resolver. Return a
+    # successful, explicit fallback contract so the frontend does not try the
+    # dead native stream path or surface a misleading 404 to the user.
+    return jsonify({
+        "mode": "youtube",
+        "fallback": "youtube",
+        "videoId": video_id,
+        "streamAvailable": False,
+        "reason": "server_resolver_unavailable",
+    })
 
 
 @app.route("/api/video/<video_id>")
@@ -654,7 +663,14 @@ def api_video(video_id: str):
             "direct": url,
             "imageOnly": bool(image_only),
         })
-    return jsonify({"error": "Could not extract video"}), 404
+    return jsonify({
+        "mode": "youtube",
+        "fallback": "youtube",
+        "videoId": video_id,
+        "imageOnly": False,
+        "streamAvailable": False,
+        "reason": "server_resolver_unavailable",
+    })
 
 
 def _proxy(video_id: str, fmt: str, ctype: str):

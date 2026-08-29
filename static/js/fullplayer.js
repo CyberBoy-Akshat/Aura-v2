@@ -3,7 +3,10 @@
 // ── Now Playing Full Screen ────────────────────────────────────────────────
 let npfSyncTimer = null;
 
+let npfVideoAligned = false;
+
 function showNpfVideo() {
+  if (!npfVideoAligned) return;
   npfHasVideo = true;
   // Lyrics take priority — only show video if no synced lyrics overlay is active
   if (!$("#npfLyrics")?.classList.contains("visible")) {
@@ -67,24 +70,23 @@ function updateNpfDisplay() {
   const imageOnly = !!(meta && meta.imageOnly === true);
   const hasSynced = lyricsSynced.length > 0 && lyricsLoadedFor === currentVideoId;
   const hasPlain = !!lyricsPlain && lyricsLoadedFor === currentVideoId;
+  const hasUnsynced = !hasSynced && hasPlain;
   const videoDead = npfVideoFailed.has(currentVideoId);
 
   // Image-only tracks: the "video" is just a static frame — replace it with a
   // lyrics box when lyrics exist (synced karaoke or plain), else keep the art.
   // Also catch tracks whose video stream genuinely can't play (dead stream)
   // so we never leave a blank frame when lyrics are available.
-  // For unsynced/script lyrics on image-only tracks, show only the cover art.
-  if (imageOnly || (videoDead && (hasSynced || hasPlain))) {
+  // Fullscreen is an immersive visual surface: only genuinely timed lyrics
+  // may occupy the art box. Plain/script lyrics are intentionally kept in the
+  // lyrics drawer, while the fullscreen view remains cover-art only.
+  if (imageOnly || hasUnsynced || (videoDead && hasSynced)) {
     if (hasSynced) {
       computeWordTimings();
       npfLyricsLastLine = -1;
       npfLineRendered = -1;
       showNpfLyrics();
-      syncNpfLyrics(getPlaybackEl().currentTime || 0);
-    } else if (hasPlain) {
-      // Plain (unsynced/script) lyrics: don't show in box for image-only tracks
-      // Just show the cover art/image only
-      hideNpfLyrics();
+      syncNpfLyrics(getPlaybackTime());
     } else {
       hideNpfLyrics();
     }
@@ -110,7 +112,7 @@ function renderPlainNpfLyrics() {
   el.innerHTML = `<div class="npf-lyrics-box"><div class="npf-lyrics-plain">${lines.map(l => esc(l)).join("<br>")}</div></div>`;
 }
 function seekNpfTo(target) {
-  if (target == null) target = getPlaybackEl().currentTime || 0;
+  if (target == null) target = getPlaybackTime();
   target = Math.max(0, target);
   const v = $("#npfVideo");
   if (v && v.src) {
@@ -136,7 +138,7 @@ function npfDriftCheck() {
   const v = $("#npfVideo");
   if (!v || !v.src || v.paused || v.readyState < 2) return;
   if (!v.duration || !isFinite(v.duration)) return;
-  const a = getPlaybackEl().currentTime || 0, b = v.currentTime || 0;
+  const a = getPlaybackTime(), b = v.currentTime || 0;
   if (b - a > 1.5) { v.currentTime = Math.min(a, Math.max(0, v.duration - 0.05)); return; }  // ran ahead → snap back
   if (a - b <= 1.5) return;                              // within a beat → leave it alone
   try {
@@ -174,6 +176,7 @@ let npfEmbedYt = null;              // YouTube iframe fallback player (extractio
 let npfEmbedId = null;
 function stopNpfVideo() {
   npfVideoLoadedId = null;
+  npfVideoAligned = false;
   if (npfSyncTimer) { clearInterval(npfSyncTimer); npfSyncTimer = null; }
   stopNpfEmbed();
   const v = $("#npfVideo");
@@ -191,7 +194,7 @@ function showNpfEmbed(id) {
   npfEmbedId = id;
   npfHasVideo = true;
   // Capture current audio time so embed starts mid-song (not from 0)
-  const startSec = Math.floor(getPlaybackEl().currentTime || 0);
+  const startSec = Math.floor(getPlaybackTime());
   // YT.Player replaces the target element with its iframe (same id), so make
   // sure a fresh container div exists before constructing each time.
   let wrap = $("#npfEmbed");
@@ -229,7 +232,7 @@ function showNpfEmbed(id) {
             try { npfEmbedYt?.mute?.(); } catch {}
             // Seek to exact audio time (fractional) then play
             try {
-              const t = getPlaybackEl().currentTime || 0;
+              const t = getPlaybackTime();
               if (t > 0.5) npfEmbedYt.seekTo(t, true);
               npfEmbedYt.playVideo();
             } catch {}
@@ -239,7 +242,7 @@ function showNpfEmbed(id) {
                 try { npfEmbedYt.playVideo?.(); } catch {}
               }
               // Re-seek after retry to ensure mid-song position sticks
-              try { const t2 = getPlaybackEl().currentTime || 0; if (t2 > 0.5) npfEmbedYt.seekTo(t2, true); } catch {}
+              try { const t2 = getPlaybackTime(); if (t2 > 0.5) npfEmbedYt.seekTo(t2, true); } catch {}
             }, 600);
           },
           onStateChange: (e) => {
@@ -247,7 +250,7 @@ function showNpfEmbed(id) {
             // 0 = ended → seek to current audio time so video follows audio, not loop to 0 alone
             if (e && e.data === 0) {
               try {
-                const t = getPlaybackEl().currentTime || 0;
+                const t = getPlaybackTime();
                 // If audio still playing, keep video in sync; else pause at end
                 if (isPlaying && useAudioEl) { npfEmbedYt.seekTo(t, true); npfEmbedYt.playVideo(); }
               } catch {}
@@ -295,7 +298,7 @@ async function loadNpfVideo() {
   // Already showing this song's video or embed? Keep in sync, don't reload.
   if (npfVideoLoadedId === id && v.src) {
     if (v.duration && isFinite(v.duration)) {
-      const a = getPlaybackEl().currentTime || 0, b = v.currentTime || 0;
+      const a = getPlaybackTime(), b = v.currentTime || 0;
       if (b - a > 5) v.currentTime = a;
     }
     if (isPlaying && v.paused && v.readyState >= 2) v.play().catch(() => {});
@@ -303,7 +306,7 @@ async function loadNpfVideo() {
   }
   if (npfEmbedId === id && npfEmbedYt) {
     // Embed already showing this song — just keep it synced
-    try { const t = getPlaybackEl().currentTime || 0; if (t > 0.5) npfEmbedYt.seekTo(t, true); } catch {}
+    try { const t = getPlaybackTime(); if (t > 0.5) npfEmbedYt.seekTo(t, true); } catch {}
     if (isPlaying) { try { npfEmbedYt.playVideo(); } catch {} }
     return;
   }
@@ -338,7 +341,26 @@ async function loadNpfVideo() {
   v.removeAttribute("loop");
   v.playbackRate = settings.speed || 1;
   npfVideoLoadedId = id;
+  npfVideoAligned = false;
   const clampToDur = t => (v.duration && isFinite(v.duration)) ? Math.min(t, Math.max(0, v.duration - 0.05)) : t;
+  let videoPresented = false;
+  const revealAlignedVideo = () => {
+    if (videoPresented || currentVideoId !== id) return;
+    try {
+      const audioTime = getPlaybackTime();
+      const alignedTime = clampToDur(audioTime);
+      // A seek can be ignored until metadata/buffer is available. Re-issue it
+      // rather than exposing frame 0 and letting the eye catch the restart.
+      if (Math.abs((v.currentTime || 0) - alignedTime) > 0.9) {
+        v.currentTime = alignedTime;
+        return;
+      }
+    } catch {}
+    videoPresented = true;
+    npfVideoAligned = true;
+    showNpfVideo();
+    if (isPlaying && v.paused) v.play().catch(() => {});
+  };
   v.onloadedmetadata = () => {
     // Runtime safety net: a SQUARE stream is a static album-art frame, not a
     // music video — flip to image-only and let updateNpfDisplay show lyrics.
@@ -349,69 +371,25 @@ async function loadNpfVideo() {
       updateNpfDisplay();
       return;
     }
-    // Seek to the LIVE audio position (not a stale pre-load capture — proxy
-    // fetch can take seconds, during which the song keeps playing). Then hold
-    // presentation until that seek lands: starting playback before the async
-    // seek completes makes the browser paint frame 0 → visible "from start".
-    let pendingSeek = false;
-    try {
-      const t0 = getPlaybackEl().currentTime || 0;
-      if (t0 > 0.5) { v.currentTime = clampToDur(t0); pendingSeek = true; }
-    } catch {}
-    if (!isPlaying) return;
-    if (!pendingSeek) { v.play().catch(() => {}); return; }
-    let started = false;
-    const startAtPos = () => {
-      if (started || currentVideoId !== id || !isPlaying) return;
-      started = true;
-      // Re-snap right before presenting in case the song advanced while buffering
-      try {
-        const a = getPlaybackEl().currentTime || 0;
-        if (a > 1 && Math.abs(a - v.currentTime) > 1.5) v.currentTime = clampToDur(a);
-      } catch {}
-      v.play().catch(() => {});
-    };
-    v.addEventListener("seeked", startAtPos, { once: true });
-    setTimeout(startAtPos, 2000);   // never let a stalled seek block playback
-  };
-  // Align the video to the current audio position once, when a seekable range
-  // actually exists and a frame is decodable. Without this the video starts at
-  // 0 while the audio is already seconds ahead → permanent "lagging behind".
-  let aligned = false;
-  const tryAlignOnce = () => {
-    try {
-      const at = getPlaybackEl().currentTime || 0;
-      if (v.seekable && v.seekable.length) {
-        const lo = v.seekable.start(0), hi = v.seekable.end(v.seekable.length - 1);
-        if (at >= lo && at <= hi) { v.currentTime = at; aligned = true; }
-        else if (at <= hi) { v.currentTime = Math.max(lo, at - 2); aligned = true; }  // close enough → align near
-      } else if (!v.seekable.length && at > 0.5) {
-        // Fallback when seekable not yet populated — direct seek
-        try { v.currentTime = at; aligned = true; } catch {}
-      }
-    } catch {}
+    // Always seek from the current audio clock. Network latency may have moved
+    // the song substantially since loadNpfVideo() started.
+    try { v.currentTime = clampToDur(getPlaybackTime()); } catch {}
+    v.addEventListener("seeked", revealAlignedVideo, { once: true });
+    setTimeout(revealAlignedVideo, 1800);
   };
   v.onloadeddata = () => {
     if (currentVideoId !== id) return;
-    // Ensure position right before showing
-    if (!aligned) {
-      try {
-        const t = getPlaybackEl().currentTime || 0;
-        if (t > 0.5) v.currentTime = clampToDur(t);
-      } catch {}
-      tryAlignOnce();
-    }
-    showNpfVideo();
+    revealAlignedVideo();
   };
   v.onplaying = () => {
     if (currentVideoId !== id) return;
     // Hard re-sync every time playback (re)starts — covers any seek that
     // silently failed during load, so video can never visibly run from 0.
     try {
-      const a = getPlaybackEl().currentTime || 0, b = v.currentTime || 0;
-      if (a > 1 && Math.abs(a - b) > 1.5) v.currentTime = clampToDur(a);
+      const a = getPlaybackTime(), b = v.currentTime || 0;
+      if (a > 1 && Math.abs(a - b) > 1.5) { v.currentTime = clampToDur(a); npfVideoAligned = false; return; }
     } catch {}
-    showNpfVideo();
+    revealAlignedVideo();
   };
   v.onerror = () => {
     console.warn("npf video: element error", v.error && v.error.message);
@@ -437,7 +415,7 @@ async function loadNpfVideo() {
       try {
         const st = npfEmbedYt.getPlayerState?.();
         if (st === 1 || st === 2) {   // playing or paused — don't fight buffering(3)
-          const a = getPlaybackEl().currentTime || 0, b = npfEmbedYt.getCurrentTime?.() || 0;
+          const a = getPlaybackTime(), b = npfEmbedYt.getCurrentTime?.() || 0;
           if (a > 1 && Math.abs(a - b) > 2) npfEmbedYt.seekTo(a, true);
         }
       } catch {}
@@ -451,7 +429,7 @@ async function loadNpfVideo() {
         // Re-sync BEFORE resuming so a stalled video never resumes at the
         // wrong place (e.g. back at the start) and looks "restarted".
         try {
-          const a = getPlaybackEl().currentTime || 0;
+          const a = getPlaybackTime();
           if (a > 1 && Math.abs(a - v.currentTime) > 1.5) v.currentTime = clampToDur(a);
         } catch {}
         v.play().catch(() => {});

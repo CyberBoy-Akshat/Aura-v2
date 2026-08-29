@@ -1,9 +1,11 @@
 /* --- LISTEN TOGETHER: lightweight room sync for Vercel-friendly sessions --- */
 let listenRoom = null;
-// Don't overwrite window.listenRoom here — it's set after room creation/join
 let listenPollTimer = null;
 let listenSyncTimer = null;
 let listenApplyingRemote = false;
+let listenLastRevision = 0;
+let listenPendingState = null;
+let listenMissingPolls = 0;
 
 function isListenTogetherGuest() { return Boolean(listenRoom?.joined && !listenRoom?.host); }
 window.isListenTogetherGuest = isListenTogetherGuest;
@@ -28,11 +30,65 @@ function roomTrack() {
 
 function roomPlaybackState() {
   const media = typeof getPlaybackEl === "function" ? getPlaybackEl() : null;
+  const position = typeof getPlaybackTime === "function"
+    ? getPlaybackTime()
+    : (media && Number.isFinite(media.currentTime) ? media.currentTime : 0);
   return {
     status: isPlaying ? "playing" : "paused",
-    position: media && Number.isFinite(media.currentTime) ? media.currentTime : 0,
+    position,
     track: roomTrack(),
+    // The backend stamps the authoritative revision/time. Keeping the payload
+    // small makes polling cheap while allowing guests to reject stale packets.
   };
+}
+
+function roomExpectedPosition(state) {
+  const base = Math.max(0, Number(state?.position) || 0);
+  const stamp = Number(state?.updatedAt) || 0;
+  return Math.max(0, base + (state?.status === "playing" && stamp ? Math.max(0, Date.now() / 1000 - stamp) : 0));
+}
+
+async function waitForRoomMedia(trackId, timeout = 9000) {
+  const started = performance.now();
+  while (currentVideoId === trackId && performance.now() - started < timeout) {
+    // The fallback is a YouTube IFrame, not an HTMLMediaElement. Once the API
+    // is ready it is the authoritative guest playback target.
+    if (!useAudioEl && ytReady && ytPlayer?.seekTo) return ytPlayer;
+    const media = typeof getPlaybackEl === "function" ? getPlaybackEl() : null;
+    if (media && media.readyState >= 1) return media;
+    await new Promise(resolve => setTimeout(resolve, 120));
+  }
+  return !useAudioEl && ytReady && ytPlayer?.seekTo
+    ? ytPlayer
+    : (typeof getPlaybackEl === "function" ? getPlaybackEl() : null);
+}
+
+async function applyRoomMediaState(state, trackId) {
+  const media = await waitForRoomMedia(trackId);
+  if (!media || currentVideoId !== trackId) return;
+  const expected = roomExpectedPosition(state);
+  listenPendingState = { state, trackId, expected };
+  try {
+    if (!useAudioEl && media === ytPlayer) {
+      const now = Number(media.getCurrentTime?.() || 0);
+      if (Number.isFinite(expected) && Math.abs(now - expected) > 0.25) media.seekTo(expected, true);
+      if (state.status === "playing") media.playVideo?.();
+      else media.pauseVideo?.();
+      return;
+    }
+    if (Number.isFinite(expected) && Math.abs((media.currentTime || 0) - expected) > 0.25) media.currentTime = expected;
+    if (state.status === "playing") {
+      await media.play();
+    } else {
+      media.pause();
+    }
+  } catch (e) {
+    // Autoplay policies can reject a guest's first play. The media event and
+    // next poll will retry without resetting the target timeline.
+    if (state.status === "playing") setTimeout(() => applyRoomMediaState(state, trackId), 350);
+  } finally {
+    listenPendingState = null;
+  }
 }
 
 function roomSetStatus(text, kind = "") {
@@ -100,7 +156,6 @@ async function createListenRoom() {
     const name = localStorage.getItem("auraRoomName") || "Aura host";
     const room = await roomApi("", { method: "POST", body: JSON.stringify({ name }) });
     listenRoom = { ...room, host: true, joined: true };
-    window.listenRoom = listenRoom;  // expose to other modules
     localStorage.setItem("auraListenRoom", JSON.stringify({ code: room.code, hostToken: room.hostToken, host: true }));
     startListenRoom();
     openModal(`<h3>Listen Together</h3><p class="modal-sub">Share this code and press play together.</p><div id="listenRoomRoot"></div>`);
@@ -115,7 +170,6 @@ async function joinListenRoom() {
   try {
     const room = await roomApi(`/${encodeURIComponent(code)}/join`, { method: "POST", body: JSON.stringify({}) });
     listenRoom = { ...room, host: false, joined: true };
-    window.listenRoom = listenRoom;  // expose to other modules
     localStorage.setItem("auraListenRoom", JSON.stringify({ code: room.code, host: false }));
     startListenRoom();
     openModal(`<h3>Listen Together</h3><p class="modal-sub">You joined the room.</p><div id="listenRoomRoot"></div>`);
@@ -128,12 +182,19 @@ async function pollListenRoom() {
   if (!listenRoom?.code) return;
   try {
     const room = await roomApi(`/${encodeURIComponent(listenRoom.code)}`);
+    listenMissingPolls = 0;
     listenRoom = { ...listenRoom, ...room };
     const count = $("#listenRoomMembers");
     if (count) count.textContent = room.members || 1;
     if (!listenRoom.host) await applyRemoteRoomState(room.state || {});
   } catch (e) {
-    if (/not found|expired/i.test(e.message)) { stopListenRoom(); showToast("Listen Together room ended"); closeModal(); }
+    if (/not found|expired/i.test(e.message)) {
+      // Vercel/serverless instances can briefly disagree while a room write is
+      // propagating. Require consecutive misses before ending the session.
+      listenMissingPolls += 1;
+      roomSetStatus(`Reconnecting to room… (${listenMissingPolls}/3)`, "warning");
+      if (listenMissingPolls >= 3) { stopListenRoom(); showToast("Listen Together room ended"); closeModal(); }
+    }
   }
 }
 
@@ -146,6 +207,9 @@ function stopListenRoom() {
   if (listenPollTimer) clearInterval(listenPollTimer);
   if (listenSyncTimer) clearInterval(listenSyncTimer);
   listenPollTimer = null; listenSyncTimer = null; listenRoom = null;
+  listenLastRevision = 0;
+  listenPendingState = null;
+  listenMissingPolls = 0;
   localStorage.removeItem("auraListenRoom");
 }
 
@@ -162,35 +226,23 @@ async function broadcastRoomState() {
 
 async function applyRemoteRoomState(state) {
   if (!state) return;
+  const revision = Number(state.revision) || 0;
+  if (revision && revision < listenLastRevision) return;
+  if (revision) listenLastRevision = revision;
   const track = state.track;
   if (track?.id && track.id !== currentVideoId) {
     listenApplyingRemote = true;
     try {
-      // Check if track already exists in queue to avoid resetting
-      const existingIdx = queue.findIndex(s => s.id === track.id);
-      if (existingIdx >= 0) {
-        // Track exists, just jump to it
-        await playSong(existingIdx);
-      } else {
-        // New track, load it - preserve position from room state
-        const normalizedTrack = normalizeSong(track);
-        await playSongFromList([normalizedTrack], 0);
-      }
-      await new Promise(r => setTimeout(r, 600));
+      await playSongFromList([normalizeSong(track)], 0, { remote: true });
     } finally { listenApplyingRemote = false; }
   }
-  const media = typeof getPlaybackEl === "function" ? getPlaybackEl() : null;
-  if (!media || !track || track.id !== currentVideoId) return;
-  // Calculate expected position based on room state timestamp
-  const expected = Math.max(0, Number(state.position) || 0) + (state.status === "playing" ? Math.max(0, (Date.now() / 1000) - (Number(state.updatedAt) || Date.now() / 1000)) : 0);
-  // Sync video to audio timeline immediately when applying remote state
-  if (Number.isFinite(expected)) {
-    media.currentTime = expected;
-    // Also sync the full-player video if open
-    try { seekNpfTo(expected); } catch {}
-  }
-  if (state.status === "playing" && !isPlaying) { listenApplyingRemote = true; try { await media.play(); } catch {} listenApplyingRemote = false; }
-  if (state.status !== "playing" && isPlaying) { listenApplyingRemote = true; try { media.pause(); } catch {} listenApplyingRemote = false; }
+  if (!track?.id || track.id !== currentVideoId) return;
+  // Do not seek an unloaded element. Waiting for readyState prevents the
+  // classic guest bug where play() fires against an empty element and the song
+  // later begins at 0:00 instead of the host's live position.
+  listenApplyingRemote = true;
+  try { await applyRoomMediaState(state, track.id); }
+  finally { listenApplyingRemote = false; }
 }
 
 async function copyListenRoomCode() {
@@ -210,8 +262,16 @@ function leaveListenRoom() { stopListenRoom(); closeModal(); showToast("Left roo
 
 function wireListenTogetherPlayback() {
   ["#btnPlay", "#npfPlay", "#btnNext", "#npfNext", "#btnPrev", "#npfPrev"].forEach(sel => $(sel)?.addEventListener("click", () => setTimeout(broadcastRoomState, 120)));
+  // The click is not the source of truth: on phones, stream resolution can
+  // take longer than the click handler. Broadcast again from real media state.
+  ["audioPlayer", "mediaVideo"].forEach(id => {
+    const media = document.getElementById(id);
+    ["play", "pause", "ended", "seeking", "seeked"].forEach(evt => media?.addEventListener(evt, () => {
+      if (listenRoom?.host && !listenApplyingRemote) setTimeout(broadcastRoomState, evt === "seeking" ? 80 : 180);
+    }));
+  });
   if (listenSyncTimer) clearInterval(listenSyncTimer);
-  listenSyncTimer = setInterval(() => { if (listenRoom?.host && isPlaying) broadcastRoomState(); }, 2200);
+  listenSyncTimer = setInterval(() => { if (listenRoom?.host && (isPlaying || queueIdx >= 0)) broadcastRoomState(); }, 1800);
 }
 
 $("#btnListenTogether")?.addEventListener("click", openListenTogether);
@@ -223,7 +283,6 @@ try {
   if (saved?.code) {
     roomApi(`/${encodeURIComponent(saved.code)}`).then(room => {
       listenRoom = { ...room, host: Boolean(saved.host), hostToken: saved.hostToken, joined: true };
-      window.listenRoom = listenRoom;  // expose to other modules
       startListenRoom();
     }).catch(() => localStorage.removeItem("auraListenRoom"));
   }

@@ -1706,3 +1706,43 @@ body::before{opacity:.12;background-image:linear-gradient(rgba(255,255,255,.09) 
   .mobile-mood-strip .mood-chip{flex:0 0 auto;padding:8px 11px;min-height:38px;border-radius:8px;font-size:.68rem}
   .mobile-mood-strip .mood-chip i{margin-right:5px}
 }
+
+/* ── Aura interaction polish ─────────────────────────────────────────────── */
+:where(button,a,input):focus-visible{
+  outline:2px solid var(--accent);
+  outline-offset:3px;
+}
+button,.nav-item,.mnav-item,.song-card,.quick-pick,.album-card,.artist-card,.eq-preset{
+  -webkit-tap-highlight-color:transparent;
+}
+.ctrl-btn,.icon-btn,.npf-close,.mnav-item,.eq-preset{
+  min-width:44px;min-height:44px;
+  transition:color .2s var(--ease),background .2s var(--ease),border-color .2s var(--ease),transform .2s var(--ease),box-shadow .2s var(--ease);
+}
+.ctrl-btn:active,.icon-btn:active,.eq-preset:active,.mnav-item:active{transform:scale(.92)}
+.progress-bar-wrap{position:relative}
+.progress-bar-wrap input[type=range]::-webkit-slider-thumb{opacity:.6}
+.progress-bar-wrap:hover input[type=range]::-webkit-slider-thumb,
+.progress-bar-wrap input[type=range]:focus-visible::-webkit-slider-thumb{opacity:1}
+.player-bar.is-live{border-color:hsl(var(--accent-h) 90% 70% / .28);box-shadow:0 18px 60px rgba(0,0,0,.48),0 0 34px hsl(var(--accent-h) 90% 55% / .12),inset 0 1px 0 rgba(255,255,255,.08)}
+.player-left:hover .player-thumb-wrap{transform:translateY(-2px) rotate(-1deg);box-shadow:0 12px 28px hsl(var(--accent-h) 80% 45% / .28)}
+.player-thumb-wrap{transition:transform .24s var(--ease),box-shadow .24s var(--ease)}
+.npf-video{opacity:0;visibility:hidden;transition:opacity .3s ease}
+.npf-video.playing{opacity:1;visibility:visible}
+.npf-lyrics.visible~.npf-ring{opacity:0}
+.listen-room-status.warning{color:#f5c77a}
+.listen-room-live{position:relative;overflow:hidden}
+.listen-room-live::before{content:"";position:absolute;inset:-80px -40px auto;height:140px;pointer-events:none;background:radial-gradient(circle,hsl(var(--accent-h) 90% 68% / .22),transparent 70%)}
+.listen-room-code,.listen-room-meta,.listen-room-share-row,.listen-room-status,.listen-room-live .modal-actions{position:relative}
+@media (prefers-reduced-motion:reduce){
+  *,*::before,*::after{animation-duration:.001ms!important;animation-iteration-count:1!important;scroll-behavior:auto!important;transition-duration:.001ms!important}
+}
+@media (max-width:600px){
+  .player-bar{backdrop-filter:blur(26px) saturate(1.35);-webkit-backdrop-filter:blur(26px) saturate(1.35)}
+  .npf-content{padding-left:18px;padding-right:18px}
+  .npf-controls{gap:12px}
+  .npf-extras{gap:8px}
+}
+@media (min-width:601px){
+  .npf-content{max-width:480px}
+}
