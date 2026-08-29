@@ -228,19 +228,26 @@ async function playViaAudio(videoId, requestId = playbackRequestId) {
 
 function playViaYouTube(videoId) {
   useAudioEl = false;
+  ytFallbackId = videoId;
+  ytFallbackErrorId = null;
   activeMediaEl = null;
   try { audioEl.pause(); audioEl.removeAttribute("src"); audioEl.load(); } catch {}
   try { mediaVideo?.pause(); mediaVideo?.removeAttribute("src"); mediaVideo?.load(); } catch {}
   const vol = parseInt($("#volumeBar")?.value || settings.volume || 80, 10);
   const go = () => {
-    if (!ytPlayer?.loadVideoById) return false;
+    if (!ytReady || !ytPlayer?.loadVideoById || ytFallbackErrorId === videoId) return false;
     try {
+      // Muted playback is the only reliable autoplay path on mobile and on
+      // serverless fallback loads. The UI volume remains independent because
+      // the iframe is the audible source only after the browser permits it.
+      ytPlayer.mute?.();
+      ytPlayer.setVolume?.(100);
       ytPlayer.loadVideoById(videoId);
-      ytPlayer.setVolume?.(vol);
       ytPlayer.playVideo?.();
-      isPlaying = true;
+      // Do not claim playback until onStateChange reports PLAYING.
+      isPlaying = false;
       updatePlayBtn();
-      startProgress();
+      stopProgress();
       return true;
     } catch {
       return false;
@@ -304,7 +311,23 @@ function togglePlay() {
   if (queueIdx < 0) return;
   if (typeof isListenTogetherGuest === "function" && isListenTogetherGuest()) { showToast("The host controls this room"); return; }
   if (useAudioEl) { const media = getPlaybackEl(); isPlaying ? media.pause() : media.play(); }
-  else if (ytPlayer?.getPlayerState) { isPlaying ? ytPlayer.pauseVideo() : ytPlayer.playVideo(); }
+  else if (ytPlayer?.getPlayerState) {
+    if (isPlaying) { ytPlayer.pauseVideo(); return; }
+    // A second click is a fresh user gesture: unmute here so mobile browsers
+    // permit audible playback after the muted bootstrap attempt.
+    if (currentVideoId) {
+      ytFallbackId = currentVideoId;
+      ytFallbackErrorId = null;
+      const vol = parseInt($("#volumeBar")?.value || settings.volume || 80, 10);
+      try {
+        const loadedId = ytPlayer.getVideoData?.()?.video_id;
+        if (loadedId !== currentVideoId) ytPlayer.loadVideoById(currentVideoId);
+        ytPlayer.unMute?.();
+        ytPlayer.setVolume?.(vol);
+        ytPlayer.playVideo?.();
+      } catch {}
+    }
+  }
 }
 
 function updatePlayBtn() {

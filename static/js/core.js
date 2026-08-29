@@ -6,6 +6,7 @@ const $$ = s => document.querySelectorAll(s);
 // ── State ──────────────────────────────────────────────────────────────────
 let queue = [], queueIdx = -1;
 let ytPlayer = null, ytReady = false, ytApiLoaded = false;
+let ytFallbackId = null, ytFallbackErrorId = null;
 let isPlaying = false, progressTimer = null;
 let shuffleOn = false, repeatMode = 0;
 let history = JSON.parse(localStorage.getItem("ythistory") || "[]");
@@ -104,18 +105,37 @@ function createPlayer() {
       events: {
         onReady: () => {
           ytReady = true;
-          if (currentVideoId) {
-            try {
-              ytPlayer.loadVideoById(currentVideoId);
-              if (isPlaying || !useAudioEl) ytPlayer.playVideo?.();
-            } catch {}
+          // Autoplay is commonly rejected unless the iframe is muted first.
+          // The app's native stream is already unavailable on the affected
+          // Vercel runtime, so the embed must be a real, deterministic fallback.
+          if (ytFallbackId && currentVideoId === ytFallbackId && !useAudioEl) {
+            try { ytPlayer.mute?.(); ytPlayer.setVolume?.(100); ytPlayer.loadVideoById(ytFallbackId); ytPlayer.playVideo?.(); } catch {}
           }
         },
         onStateChange: e => {
           if (e.data === YT.PlayerState.ENDED) handleEnded();
-          if (!useAudioEl) { isPlaying = e.data === YT.PlayerState.PLAYING; updatePlayBtn(); isPlaying ? startProgress() : stopProgress(); npfVideoSync(isPlaying); }
+          if (!useAudioEl) {
+            isPlaying = e.data === YT.PlayerState.PLAYING;
+            updatePlayBtn();
+            isPlaying ? startProgress() : stopProgress();
+            npfVideoSync(isPlaying);
+          }
         },
-        onError: () => { if (currentVideoId) playViaAudio(currentVideoId); },
+        onAutoplayBlocked: () => {
+          isPlaying = false;
+          updatePlayBtn();
+          stopProgress();
+          if (typeof showToast === "function") showToast("Tap play to start playback");
+        },
+        onError: () => {
+          // Do not recurse between yt-dlp and YouTube forever. A YouTube error
+          // is terminal for this fallback attempt; keep the cover/art usable.
+          ytFallbackErrorId = currentVideoId || ytFallbackId;
+          isPlaying = false;
+          updatePlayBtn();
+          stopProgress();
+          if (typeof showToast === "function") showToast("This video cannot be played here");
+        },
       },
     });
   } catch { /* fallback */ }
