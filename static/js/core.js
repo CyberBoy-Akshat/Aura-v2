@@ -6,7 +6,7 @@ const $$ = s => document.querySelectorAll(s);
 // ── State ──────────────────────────────────────────────────────────────────
 let queue = [], queueIdx = -1;
 let ytPlayer = null, ytReady = false, ytApiLoaded = false;
-let ytFallbackId = null, ytFallbackErrorId = null;
+let ytFallbackId = null, ytFallbackErrorId = null, ytFallbackResolvedFor = null;
 let isPlaying = false, progressTimer = null;
 let shuffleOn = false, repeatMode = 0;
 let history = JSON.parse(localStorage.getItem("ythistory") || "[]");
@@ -128,13 +128,33 @@ function createPlayer() {
           if (typeof showToast === "function") showToast("Tap play to start playback");
         },
         onError: () => {
-          // Do not recurse between yt-dlp and YouTube forever. A YouTube error
-          // is terminal for this fallback attempt; keep the cover/art usable.
-          ytFallbackErrorId = currentVideoId || ytFallbackId;
+          // Restricted/region-locked music IDs can fail in the embed even when
+          // the catalogue entry is valid. Try one nearby searchable match, but
+          // never recurse: the room and UI continue to use the original ID.
+          const originalId = currentVideoId || ytFallbackId;
+          ytFallbackErrorId = ytFallbackId || originalId;
           isPlaying = false;
           updatePlayBtn();
           stopProgress();
-          if (typeof showToast === "function") showToast("This video cannot be played here");
+          if (ytFallbackResolvedFor === originalId || typeof api !== "function") {
+            if (typeof showToast === "function") showToast("This video cannot be played here");
+            return;
+          }
+          ytFallbackResolvedFor = originalId;
+          const song = queue[queueIdx] || {};
+          const query = `${song.title || ""} ${song.artist || ""}`.trim();
+          if (!query) return;
+          api(`/api/search?q=${encodeURIComponent(query)}&filter=songs`).then(results => {
+            const alt = (Array.isArray(results) ? results : [])
+              .find(item => item?.id && item.id !== originalId);
+            if (!alt || currentVideoId !== originalId || !ytPlayer) return;
+            ytFallbackId = alt.id;
+            ytFallbackErrorId = null;
+            try { ytPlayer.mute?.(); ytPlayer.loadVideoById(alt.id); ytPlayer.playVideo?.(); } catch {}
+            if (typeof showToast === "function") showToast("Using a playable audio match");
+          }).catch(() => {
+            if (typeof showToast === "function") showToast("This video cannot be played here");
+          });
         },
       },
     });

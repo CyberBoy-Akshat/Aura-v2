@@ -230,6 +230,7 @@ function playViaYouTube(videoId) {
   useAudioEl = false;
   ytFallbackId = videoId;
   ytFallbackErrorId = null;
+  ytFallbackResolvedFor = null;
   activeMediaEl = null;
   try { audioEl.pause(); audioEl.removeAttribute("src"); audioEl.load(); } catch {}
   try { mediaVideo?.pause(); mediaVideo?.removeAttribute("src"); mediaVideo?.load(); } catch {}
@@ -315,13 +316,14 @@ function togglePlay() {
     if (isPlaying) { ytPlayer.pauseVideo(); return; }
     // A second click is a fresh user gesture: unmute here so mobile browsers
     // permit audible playback after the muted bootstrap attempt.
-    if (currentVideoId) {
-      ytFallbackId = currentVideoId;
+    const sourceId = ytFallbackId || currentVideoId;
+    if (sourceId) {
+      ytFallbackId = sourceId;
       ytFallbackErrorId = null;
       const vol = parseInt($("#volumeBar")?.value || settings.volume || 80, 10);
       try {
         const loadedId = ytPlayer.getVideoData?.()?.video_id;
-        if (loadedId !== currentVideoId) ytPlayer.loadVideoById(currentVideoId);
+        if (loadedId !== sourceId) ytPlayer.loadVideoById(sourceId);
         ytPlayer.unMute?.();
         ytPlayer.setVolume?.(vol);
         ytPlayer.playVideo?.();
